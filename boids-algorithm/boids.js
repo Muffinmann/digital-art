@@ -12,6 +12,9 @@ const params = {
     alignmentWeight: 1.0,
     cohesionWeight: 1.0,
     boundaryForce: 0.5,
+    boundaryBufferZone: 0.15,
+    boundaryMinSpeed: 0.7,
+    boundaryCurve: 3,
     showBoundary: true
 };
 
@@ -46,24 +49,56 @@ class Boid {
     
     edges() {
         const margin = boundarySize / 2;
+        const bufferZone = margin * params.boundaryBufferZone;
         const turnFactor = params.boundaryForce;
         
-        if (this.position.x > margin) {
-            this.velocity.x -= turnFactor;
-        } else if (this.position.x < -margin) {
-            this.velocity.x += turnFactor;
+        // Calculate distances to boundaries
+        const distToRight = margin - this.position.x;
+        const distToLeft = this.position.x + margin;
+        const distToTop = margin - this.position.y;
+        const distToBottom = this.position.y + margin;
+        const distToFront = margin - this.position.z;
+        const distToBack = this.position.z + margin;
+        
+        // Find minimum distance to any boundary
+        const minDist = Math.min(
+            distToRight, distToLeft,
+            distToTop, distToBottom,
+            distToFront, distToBack
+        );
+        
+        // Apply speed dampening only very close to boundaries
+        if (minDist < bufferZone) {
+            // Gradually reduce speed as we approach boundary
+            const speedMultiplier = params.boundaryMinSpeed + 
+                ((1 - params.boundaryMinSpeed) * (minDist / bufferZone));
+            this.velocity.multiplyScalar(speedMultiplier);
         }
         
-        if (this.position.y > margin) {
-            this.velocity.y -= turnFactor;
-        } else if (this.position.y < -margin) {
-            this.velocity.y += turnFactor;
+        // Apply smooth turning forces based on proximity to boundaries
+        // The force increases exponentially as we get closer
+        if (distToRight < bufferZone) {
+            const force = turnFactor * Math.pow(1 - (distToRight / bufferZone), params.boundaryCurve);
+            this.velocity.x -= force;
+        } else if (distToLeft < bufferZone) {
+            const force = turnFactor * Math.pow(1 - (distToLeft / bufferZone), params.boundaryCurve);
+            this.velocity.x += force;
         }
         
-        if (this.position.z > margin) {
-            this.velocity.z -= turnFactor;
-        } else if (this.position.z < -margin) {
-            this.velocity.z += turnFactor;
+        if (distToTop < bufferZone) {
+            const force = turnFactor * Math.pow(1 - (distToTop / bufferZone), params.boundaryCurve);
+            this.velocity.y -= force;
+        } else if (distToBottom < bufferZone) {
+            const force = turnFactor * Math.pow(1 - (distToBottom / bufferZone), params.boundaryCurve);
+            this.velocity.y += force;
+        }
+        
+        if (distToFront < bufferZone) {
+            const force = turnFactor * Math.pow(1 - (distToFront / bufferZone), params.boundaryCurve);
+            this.velocity.z -= force;
+        } else if (distToBack < bufferZone) {
+            const force = turnFactor * Math.pow(1 - (distToBack / bufferZone), params.boundaryCurve);
+            this.velocity.z += force;
         }
     }
     
@@ -271,6 +306,9 @@ function initGUI() {
     
     const environmentFolder = gui.addFolder('Environment');
     environmentFolder.add(params, 'boundaryForce', 0, 2).step(0.1).name('Boundary Force');
+    environmentFolder.add(params, 'boundaryBufferZone', 0.05, 0.5).step(0.05).name('Buffer Zone %');
+    environmentFolder.add(params, 'boundaryMinSpeed', 0.1, 1.0).step(0.1).name('Min Speed at Edge');
+    environmentFolder.add(params, 'boundaryCurve', 1, 5).step(0.5).name('Turn Sharpness');
     environmentFolder.add(params, 'showBoundary').name('Show Boundary').onChange((value) => {
         if (window.boundaryBox) {
             window.boundaryBox.visible = value;
